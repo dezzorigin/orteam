@@ -5,8 +5,7 @@
 | Field | Nilai |
 |---|---|
 | Nama Proyek | Orteam |
-| Repo | dezzorigin/orteam |
-| Tech Stack | Next.js 14 |
+| Tech Stack | Next.js, Python |
 | Status | Hampir selesai (beta) |
 | Penanggung Jawab | Nabil Aulia Dika |
 | Versi Dokumen | 1.0 |
@@ -14,7 +13,7 @@
 
 ## 2. Latar Belakang
 
-Proyek ini dikembangkan sebagai bagian dari portofolio dan kebutuhan operasional. Dokumen ini mengikuti standar PRD nasional untuk memastikan ruang lingkup, fitur, dan kriteria keberhasilan terdefinisi dengan jelas.
+Proyek ini dikembangkan sebagai bagian dari portofolio dan kebutuhan operasional. Dokumen ini mengikuti standar PRD nasional agar ruang lingkup, fitur, dan kriteria keberhasilan terdefinisi dengan jelas.
 
 ## 3. Masalah yang Diselesaikan
 
@@ -41,13 +40,16 @@ Pengguna membutuhkan solusi digital yang efisien, terukur, dan mudah dipelihara 
 
 Struktur proyek (file/direktori utama):
 - .agents/
-- .env
-- .gitignore
+- docs/
+- public/
+- src/
+- supabase/
 - AGENTS.md
 - CLAUDE.md
+- LICENSE
+- PRD.md
 - README.md
 - components.json
-- docs/
 - eslint.config.mjs
 - next-env.d.ts
 - next.config.ts
@@ -55,12 +57,8 @@ Struktur proyek (file/direktori utama):
 - pnpm-lock.yaml
 - pnpm-workspace.yaml
 - postcss.config.mjs
-- public/
 - send-email.js
 - skills-lock.json
-- src/
-- supabase/
-- tsconfig.json
 
 ## 7. Persyaratan Non-Fungsional
 
@@ -71,7 +69,7 @@ Struktur proyek (file/direktori utama):
 
 ## 8. Arsitektur & Tech Stack
 
-Next.js 14
+Next.js, Python
 
 ## 9. Milestone / Roadmap
 
