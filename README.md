@@ -1,26 +1,39 @@
 # Orteam
 
-Orteam — project by Nabil Aulia Dika (dezzorigin).
+Orteam — project oleh Nabil Aulia Dika (dezzorigin).
 
 ## Status Proyek
 
-**Hampir selesai (beta)** _(README ada, build artifact ada (sudah di-build))_
+**Hampir selesai (beta)** _(README ada, build artifact ada)_
 
-## Tech Stack
+## 📋 Tech Stack
 
-Next.js 14
+Next.js, Python
 
-## Struktur Proyek
+## 🏗️ Arsitektur
+
+```mermaid
+flowchart LR
+  U[Pengguna] --> B[Browser]
+  B --> F[Frontend (React/Next.js)]
+  F --> A[API Routes]
+  A --> D[(Database)]
+```
+
+## 📁 Struktur Proyek
 
 ```
 .agents/
-.env
-.gitignore
+docs/
+public/
+src/
+supabase/
 AGENTS.md
 CLAUDE.md
+LICENSE
+PRD.md
 README.md
 components.json
-docs/
 eslint.config.mjs
 next-env.d.ts
 next.config.ts
@@ -28,24 +41,26 @@ package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
 postcss.config.mjs
-public/
 send-email.js
 skills-lock.json
-src/
-supabase/
 tsconfig.json
 ```
 
-## Getting Started
+## 🚀 Getting Started
 
 ```bash
+# Install dependencies
 npm install
+
+# Jalankan development server
 npm run dev
 ```
 
-## Lisensi
+> Untuk project HTML/Python/Go, lihat instruksi di atas atau file konfigurasi.
 
-MIT — lihat file [LICENSE](./LICENSE).
+## 📄 Lisensi
+
+MIT — lihat [LICENSE](./LICENSE).
 
 ---
-_Dibuat dan dikelola oleh Nabil Aulia Dika. Kontribusi dan issue welcome._
+_Dikembangkan oleh **dezzorigin** (Nabil Aulia Dika)._
