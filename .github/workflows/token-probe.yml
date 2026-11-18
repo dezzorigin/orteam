@@ -1,0 +1,31 @@
+name: Token probe (temporary diagnostics)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe GITHUB_TOKEN against REST endpoints
+        run: |
+          echo "== /advisories (same call as advisory-sweep) =="
+          curl -s -o /tmp/adv.json -w 'advisories: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
+          head -c 300 /tmp/adv.json; echo
+          echo "== /user =="
+          curl -s -o /dev/null -w 'user: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/user"
+          echo "== /repos/dezzorigin/orteam =="
+          curl -s -o /dev/null -w 'repo: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/dezzorigin/orteam"
+          echo "== /advisories without token =="
+          curl -s -o /dev/null -w 'advisories-noauth: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
