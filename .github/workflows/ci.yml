@@ -145,30 +145,42 @@ jobs:
           [ "$code" = "404" ] || (echo "rute tak dikenal harus 404, dapat $code" && exit 1)
           echo "404: OK"
 
-  # TEMPORARY DIAGNOSTIC (hapus sebelum merge): advisory-sweep gagal 2x
-  # di CI dengan "GitHub API 401 Bad credentials" padahal token yang sama
-  # lolos di docsumm/my-dayz. Job ini menguji token terhadap endpoint
-  # yang sama + kontrol /user dan tanpa token.
+  # TEMPORARY DIAGNOSTIC v2: sweep gagal 4x dgn 401 padahal curl dgn token
+  # yang sama 200 di job probe. Job ini mengisolasi perbedaan klien HTTP
+  # (urllib vs curl, User-Agent, per_page) dalam SATU runner yang sama.
   token-probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe GITHUB_TOKEN
+      - name: Probe urllib vs curl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "== /advisories dgn token (sama dgn sweep) =="
-          curl -s -o /tmp/adv.json -w 'advisories: %{http_code}\n' \
+          python3 - <<'PYEOF'
+          import urllib.request, urllib.error, os
+          token = os.environ["GITHUB_TOKEN"]
+          def get(url, headers):
+              req = urllib.request.Request(url, headers=headers)
+              try:
+                  with urllib.request.build_opener().open(req, timeout=30) as r:
+                      return r.status
+              except urllib.error.HTTPError as e:
+                  return e.code
+              except Exception as e:
+                  return f"ERR {type(e).__name__}"
+          base100 = "https://api.github.com/advisories?ecosystem=npm&per_page=100&affects=%40babel%2Fruntime"
+          base1 = base100.replace("per_page=100", "per_page=1")
+          auth = {"Accept": "application/vnd.github+json", "Authorization": "Bearer " + token}
+          print("urllib default-UA per_page=100 + token:", get(base100, dict(auth)), flush=True)
+          print("urllib curl-UA per_page=100 + token:", get(base100, dict(auth, **{"User-Agent": "curl/8.0"})), flush=True)
+          print("urllib default-UA per_page=1 + token:", get(base1, dict(auth)), flush=True)
+          print("urllib default-UA per_page=100 TANPA token:", get(base100, {"Accept": "application/vnd.github+json"}), flush=True)
+          print("token len:", len(token), "prefix:", token[:4], flush=True)
+          PYEOF
+          echo "== curl kontrol, token sama =="
+          curl -s -o /dev/null -w 'curl per_page=100 + token: %{http_code}\n' \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
-          head -c 300 /tmp/adv.json; echo
-          echo "== /user dgn token =="
-          curl -s -o /dev/null -w 'user: %{http_code}\n' \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/user"
-          echo "== /advisories tanpa token =="
-          curl -s -o /dev/null -w 'advisories-noauth: %{http_code}\n' \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
+            "https://api.github.com/advisories?ecosystem=npm&per_page=100&affects=%40babel%2Fruntime"
 
   # Dokumen wajib ada + diagram SVG benar-benar SVG (bukan placeholder).
   docs:
