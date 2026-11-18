@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orteam — Diagram Arsitektur</title>
+<style>
+  :root { --ink:#111; --muted:#666; --line:#e5e5e5; --card:#fff; --bg:#fdfdfd; --accent:#171717; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 -apple-system,"Segoe UI",Inter,Roboto,sans-serif; }
+  header { max-width:960px; margin:0 auto; padding:56px 24px 8px; }
+  header p.kicker { text-transform:uppercase; letter-spacing:.14em; font-size:12px; color:var(--muted); margin:0 0 8px; }
+  header h1 { font-size:40px; line-height:1.05; letter-spacing:-.03em; margin:0 0 12px; }
+  header p.lede { color:var(--muted); max-width:640px; margin:0; }
+  main { max-width:960px; margin:0 auto; padding:24px; }
+  figure { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:28px 24px; margin:0 0 24px; }
+  figcaption { margin-top:16px; }
+  figcaption h2 { font-size:20px; letter-spacing:-.02em; margin:0 0 4px; }
+  figcaption p { color:var(--muted); margin:0; font-size:14px; }
+  .num { display:inline-block; width:28px; height:28px; line-height:28px; text-align:center; border-radius:50%; background:var(--accent); color:#fff; font-size:13px; font-weight:700; margin-right:8px; vertical-align:2px; }
+  footer { max-width:960px; margin:0 auto; padding:0 24px 56px; color:var(--muted); font-size:13px; }
+  svg { width:100%; height:auto; display:block; }
+  .box { fill:#fff; stroke:#111; stroke-width:1.5; }
+  .box-fill { fill:#111; stroke:#111; stroke-width:1.5; }
+  .box-soft { fill:#f5f5f5; stroke:#d4d4d4; stroke-width:1.5; }
+  .lbl { font:600 14px -apple-system,"Segoe UI",Inter,sans-serif; fill:#111; }
+  .lbl-w { font:600 14px -apple-system,"Segoe UI",Inter,sans-serif; fill:#fff; }
+  .sub { font:400 12px -apple-system,"Segoe UI",Inter,sans-serif; fill:#666; }
+  .sub-w { font:400 12px -apple-system,"Segoe UI",Inter,sans-serif; fill:#a1a1aa; }
+  .arr { stroke:#111; stroke-width:1.5; fill:none; marker-end:url(#ah); }
+  .arr-dash { stroke:#888; stroke-width:1.5; fill:none; stroke-dasharray:5 4; marker-end:url(#ah); }
+  .tag { font:700 11px -apple-system,"Segoe UI",Inter,sans-serif; fill:#666; letter-spacing:.08em; }
+</style>
+</head>
+<body>
+<header>
+  <p class="kicker">Orteam · Diagram</p>
+  <h1>Arsitektur, data &amp; alur demo</h1>
+  <p class="lede">Tiga diagram editorial — bukan Mermaid. Arsitektur runtime (apa yang jalan di Pages),
+  model data (apa yang disimpan di Supabase), dan alur workspace demo (apa yang terjadi saat
+  pengguna menambah task). Dibuat mengikuti gaya diagram-design: HTML + SVG murni.</p>
+</header>
+<main>
+
+<figure>
+<svg viewBox="0 0 880 430" role="img" aria-label="Diagram arsitektur runtime Orteam">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+  <text class="tag" x="20" y="24">RUNTIME — CLOUDFLARE PAGES (STATIC EXPORT)</text>
+  <rect class="box" x="20" y="44" width="180" height="76" rx="12"/>
+  <text class="lbl" x="110" y="76" text-anchor="middle">Browser</text>
+  <text class="sub" x="110" y="96" text-anchor="middle">pengguna · tanpa login</text>
+  <rect class="box-fill" x="280" y="44" width="220" height="76" rx="12"/>
+  <text class="lbl-w" x="390" y="76" text-anchor="middle">orteam.pages.dev</text>
+  <text class="sub-w" x="390" y="96" text-anchor="middle">HTML + JS statis (out/)</text>
+  <rect class="box" x="580" y="44" width="280" height="76" rx="12"/>
+  <text class="lbl" x="720" y="76" text-anchor="middle">Next.js 16.4.6 · React 19</text>
+  <text class="sub" x="720" y="96" text-anchor="middle">App Router · output: “export”</text>
+  <path class="arr" d="M200,82 H280"/>
+  <path class="arr" d="M500,82 H580"/>
+  <rect class="box-soft" x="280" y="170" width="220" height="76" rx="12"/>
+  <text class="lbl" x="390" y="202" text-anchor="middle">Landing ( / )</text>
+  <text class="sub" x="390" y="222" text-anchor="middle">hero · preview · fitur · footer</text>
+  <rect class="box-soft" x="580" y="170" width="280" height="76" rx="12"/>
+  <text class="lbl" x="720" y="202" text-anchor="middle">Workspace ( /workspace )</text>
+  <text class="sub" x="720" y="222" text-anchor="middle">Kanban + Visual Canvas (client)</text>
+  <path class="arr" d="M390,120 V170"/>
+  <path class="arr" d="M720,120 V170"/>
+  <rect class="box" x="280" y="296" width="220" height="76" rx="12"/>
+  <text class="lbl" x="390" y="328" text-anchor="middle">localStorage</text>
+  <text class="sub" x="390" y="348" text-anchor="middle">orteam-demo-v1 · mode demo</text>
+  <rect class="box" x="580" y="296" width="280" height="76" rx="12"/>
+  <text class="lbl" x="720" y="328" text-anchor="middle">Supabase (opsional)</text>
+  <text class="sub" x="720" y="348" text-anchor="middle">Postgres + RLS · bila env diset</text>
+  <path class="arr" d="M720,246 V296"/>
+  <path class="arr-dash" d="M390,246 V296"/>
+  <text class="sub" x="400" y="276">seed → simpan</text>
+  <text class="sub" x="730" y="276">bila terkonfigurasi</text>
+</svg>
+<figcaption><h2><span class="num">1</span>Arsitektur runtime</h2>
+<p>Deploy adalah file statis di Cloudflare Pages. Tidak ada server, route handler, atau middleware
+yang berjalan — middleware Clerk lama sudah dihapus karena paketnya tidak terinstal dan tidak ada
+kuncinya. Workspace demo menyimpan state di localStorage; Supabase hanya aktif bila env diset.</p></figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 880 400" role="img" aria-label="Diagram model data Orteam">
+  <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+  <text class="tag" x="20" y="24">MODEL DATA — SUPABASE / SCHEMA.SQL</text>
+  <rect class="box" x="20" y="44" width="250" height="150" rx="12"/>
+  <text class="lbl" x="40" y="76">users</text>
+  <text class="sub" x="40" y="100">id TEXT PK — Clerk user id</text>
+  <text class="sub" x="40" y="120">email · full_name · avatar_url</text>
+  <text class="sub" x="40" y="140">created_at · updated_at</text>
+  <text class="sub" x="40" y="170">RLS: hanya baris sendiri</text>
+  <rect class="box" x="315" y="44" width="250" height="150" rx="12"/>
+  <text class="lbl" x="335" y="76">teams</text>
+  <text class="sub" x="335" y="100">id TEXT PK — Clerk org id</text>
+  <text class="sub" x="335" y="120">name · slug · image_url</text>
+  <text class="sub" x="335" y="140">created_at · updated_at</text>
+  <text class="sub" x="335" y="170">RLS: hanya anggota org</text>
+  <rect class="box-fill" x="610" y="44" width="250" height="190" rx="12"/>
+  <text class="lbl-w" x="630" y="76">tasks</text>
+  <text class="sub-w" x="630" y="100">id UUID PK · team_id → teams</text>
+  <text class="sub-w" x="630" y="120">title · description</text>
+  <text class="sub-w" x="630" y="140">status: TODO / DOING / DONE</text>
+  <text class="sub-w" x="630" y="160">created_by → users</text>
+  <text class="sub-w" x="630" y="180">created_at</text>
+  <text class="sub-w" x="630" y="210">RLS: hanya anggota tim pemilik</text>
+  <path class="arr" d="M270,110 H315" marker-end="url(#ah2)"/>
+  <path class="arr" d="M565,130 H610" marker-end="url(#ah2)"/>
+  <text class="sub" x="272" y="96">1—n</text>
+  <text class="sub" x="567" y="116">1—n</text>
+  <rect class="box-soft" x="20" y="250" width="840" height="110" rx="12"/>
+  <text class="lbl" x="40" y="284">Mode demo memakai bentuk baris yang sama</text>
+  <text class="sub" x="40" y="308">Seed di src/lib/demo-data.ts mengikuti kolom schema.sql persis (id, team_id, title, description, status,</text>
+  <text class="sub" x="40" y="328">created_by, created_at) — jadi migrasi demo → Supabase tinggal mengganti sumber baca, bukan bentuk data.</text>
+</svg>
+<figcaption><h2><span class="num">2</span>Model data</h2>
+<p>Tiga tabel, dua relasi. RLS adalah penjaga aksesnya: users hanya membaca baris sendiri,
+tasks hanya dibaca/diubah anggota tim pemilik. Detail kebijakan ada di docs/SCHEMA.md.</p></figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 880 360" role="img" aria-label="Diagram alur tambah task di workspace demo">
+  <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+  <text class="tag" x="20" y="24">ALUR — TAMBAH TASK DI WORKSPACE DEMO</text>
+  <rect class="box" x="20" y="50" width="150" height="64" rx="12"/>
+  <text class="lbl" x="95" y="78" text-anchor="middle">Ketik judul</text>
+  <text class="sub" x="95" y="98" text-anchor="middle">input kolom</text>
+  <rect class="box" x="210" y="50" width="150" height="64" rx="12"/>
+  <text class="lbl" x="285" y="78" text-anchor="middle">Enter / +</text>
+  <text class="sub" x="285" y="98" text-anchor="middle">addTask(status)</text>
+  <rect class="box" x="400" y="50" width="170" height="64" rx="12"/>
+  <text class="lbl" x="485" y="78" text-anchor="middle">State baru</text>
+  <text class="sub" x="485" y="98" text-anchor="middle">tasks + 1 baris</text>
+  <rect class="box-fill" x="610" y="50" width="250" height="64" rx="12"/>
+  <text class="lbl-w" x="735" y="78" text-anchor="middle">localStorage</text>
+  <text class="sub-w" x="735" y="98" text-anchor="middle">saveState() · orteam-demo-v1</text>
+  <path class="arr" d="M170,82 H210" marker-end="url(#ah3)"/>
+  <path class="arr" d="M360,82 H400" marker-end="url(#ah3)"/>
+  <path class="arr" d="M570,82 H610" marker-end="url(#ah3)"/>
+  <rect class="box-soft" x="20" y="180" width="400" height="120" rx="12"/>
+  <text class="lbl" x="40" y="212">Pindah kolom ( ← → )</text>
+  <text class="sub" x="40" y="236">moveTask(id, ±1) — status berubah TODO ⇄ DOING ⇄ DONE,</text>
+  <text class="sub" x="40" y="256">langsung tersimpan. Tidak ada request jaringan.</text>
+  <text class="sub" x="40" y="280">Tombol nonaktif di ujung (TODO tidak bisa ←, DONE tidak bisa →).</text>
+  <rect class="box-soft" x="460" y="180" width="400" height="120" rx="12"/>
+  <text class="lbl" x="480" y="212">Reset demo</text>
+  <text class="sub" x="480" y="236">Tombol “Reset demo” mengembalikan seed awal</text>
+  <text class="sub" x="480" y="256">(9 task · 4 node canvas) dan menimpa simpanan.</text>
+  <text class="sub" x="480" y="280">Ganti tim tidak menghapus data tim lain.</text>
+</svg>
+<figcaption><h2><span class="num">3</span>Alur workspace demo</h2>
+<p>Semua mutasi sinkron di klien dan langsung tersimpan. Play-test end-to-end 18 Nov 2026:
+tambah task lewat UI muncul di kolom To Do, lalu pindah ke Doing — tercatat di screenshot
+04-workspace-kanban-added.png.</p></figcaption>
+</figure>
+
+</main>
+<footer>
+  Orteam · docs/DIAGRAMS.html — diagram digambar sebagai HTML + SVG (gaya diagram-design),
+  bukan Mermaid. Sumber kebenaran: supabase/schema.sql, src/lib/demo-data.ts, src/app/workspace/page.tsx.
+</footer>
+</body>
+</html>
