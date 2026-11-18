@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (0 error)
+        run: npm run lint
+
+      - name: Build (static export)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Static output contains both routes
+        run: |
+          test -s out/index.html
+          test -s out/workspace.html
+          grep -q "The smart workspace for your team" out/index.html
+          grep -q "Kanban Board" out/workspace.html
+
+      - name: Upload static output
+        uses: actions/upload-artifact@v4
+        with:
+          name: out
+          path: out/
+
+  # Tes Python (stdlib unittest) untuk skill scripts yang ikut ter-commit
+  # di .agents/skills/ui-ux-pro-max/scripts/. Beda dari repo Next
+  # sebelumnya (worker-test / kontrak SSE / kontrak ringkasan): di sini
+  # yang diuji adalah sisi Python repo ini — tanpa dependensi eksternal.
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run skill script tests
+        run: python3 -m unittest discover -s .agents/skills/ui-ux-pro-max/scripts/tests -v
+
+  # Gate keamanan dependensi produksi (pengganti `npm audit --omit=dev`).
+  # `npm audit --omit=dev` tetap melaporkan advisory yang hanya reachable
+  # lewat dev deps (bug npm yang diketahui), sehingga job audit lama gagal
+  # deterministik pada temuan HIGH dev-only padahal pohon produksi bersih.
+  # Sweep ini memakai sumber data yang sama (GitHub Advisory Database,
+  # dipakai Dependabot) tapi hanya memeriksa dependensi produksi, dan
+  # tetap FAIL kalau ada temuan high/critical di prod.
+  #
+  # CATATAN KLASIFIKASI (pelajaran repo #22): `shadcn` (CLI) HARUS tetap
+  # di devDependencies — ia pernah duduk di dependencies dan menyeret
+  # seluruh pohonnya (MCP SDK, express, dotenvx, undici, ...) ke
+  # klasifikasi produksi, 57 temuan HIGH/CRITICAL di CI run pertama.
+  # Di repo ini klasifikasi sudah diperbaiki; yang dicek sweep adalah
+  # Next.js 16.4.6 (upgrade dari 16.3.0, pola repo #23) + React 19 +
+  # Supabase-js + pendukung UI. Hasil lokal 18 Nov 2026: 81 paket
+  # produksi, 0 temuan high/critical.
+  advisory-sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Advisory sweep (production, high and above)
+        run: python3 scripts/advisory-sweep.py
+        env:
+          GITHUB_TOKEN: <redacted>
+
+  # Smoke test end-to-end lokal: sajikan out/ dengan scripts/serve.mjs
+  # (resolusi path ala Cloudflare Pages — lihat komentar di file itu),
+  # lalu curl. Beda dari repo Next sebelumnya: yang diuji adalah KONTRAK
+  # WORKSPACE DEMO — landing berisi hero + link GitHub dezzorigin +
+  # preview produk, /workspace menyajikan HTML 200 dengan seed Kanban
+  # ter-render di sisi server (bukan kolom kosong menunggu JS).
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (static export)
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Serve + smoke test
+        run: |
+          set -euo pipefail
+          (PORT=8335 node scripts/serve.mjs out > /tmp/orteam-serve.log 2>&1 &)
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8335/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          # Landing: hero + navbar GitHub + preview produk + fitur + footer
+          curl -fsS http://127.0.0.1:8335/ | grep -q "The smart workspace for your team" \
+            && echo "landing: hero OK"
+          curl -fsS http://127.0.0.1:8335/ | grep -q "github.com/dezzorigin/orteam" \
+            && echo "landing: link GitHub OK"
+          curl -fsS http://127.0.0.1:8335/ | grep -q "Satu workspace, semua kerja tim" \
+            && echo "landing: fitur OK"
+          curl -fsS http://127.0.0.1:8335/ | grep -q "Lisensi MIT" \
+            && echo "landing: footer OK"
+          # Workspace: 200 + seed Kanban ter-render di HTML statis
+          curl -fsS http://127.0.0.1:8335/workspace | grep -q "Kanban Board" \
+            && echo "workspace: kanban OK"
+          curl -fsS http://127.0.0.1:8335/workspace | grep -q "Rancang skema RLS tasks per tim" \
+            && echo "workspace: seed task OK"
+          curl -fsS http://127.0.0.1:8335/workspace | grep -q "Visual Canvas" \
+            && echo "workspace: canvas OK"
+          # Aset: favicon tidak 404
+          curl -fsS -o /dev/null http://127.0.0.1:8335/favicon.ico && echo "favicon: 200 OK"
+          # Rute tak dikenal: 404
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8335/tidak-ada)
+          [ "$code" = "404" ] || (echo "rute tak dikenal harus 404, dapat $code" && exit 1)
+          echo "404: OK"
+
+  # Dokumen wajib ada + diagram SVG benar-benar SVG (bukan placeholder).
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check docs
+        run: |
+          set -euo pipefail
+          for f in README.md PRD.md CHANGELOG.md docs/README.md docs/PRD.MD docs/SDD.MD \
+              docs/DESIGN.MD docs/ARCHITECTURE.md docs/SCHEMA.md docs/SECURITY.md \
+              docs/DEPLOYMENT.md docs/DEMO.md docs/DIAGRAMS.html .env.example; do
+            test -s "$f" || (echo "hilang/kosong: $f" && exit 1)
+          done
+          grep -q "<svg" docs/DIAGRAMS.html || (echo "DIAGRAMS.html tanpa SVG" && exit 1)
+          grep -q "docs/screenshots/01-landing-hero.png" README.md \
+            || (echo "README tanpa screenshot landing" && exit 1)
+          grep -q "docs/demo/demo.mp4" README.md \
+            || (echo "README tanpa video demo" && exit 1)
+          test -s docs/demo/demo.mp4 || (echo "video demo hilang" && exit 1)
+          test -s docs/screenshots/03-workspace-kanban.png || (echo "screenshot kanban hilang" && exit 1)
+          echo "docs: semua berkas ada"

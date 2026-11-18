@@ -1,120 +1,118 @@
 # 🏗️ Orteam Software Design Document (SDD)
 
-This document details the architectural decisions, data flows, and technical implementation strategies for the Orteam SaaS platform. It serves as the deep-dive counterpart to the PRD.
+Dokumen ini merinci keputusan arsitektur dan alur data Orteam. Ditulis ulang
+18 Nov 2026: bagian "yang ada" vs "yang direncanakan" dipisah secara
+eksplisit — versi lama mencampur keduanya sehingga terbaca seolah semua
+sudah diimplementasikan.
 
 ---
 
-## 1. System Context & Paradigm
+## 1. Konteks sistem — YANG ADA
 
-Orteam operates on a **Monolith Serverless** architecture. By utilizing Next.js as a fullstack framework deployed to edge/serverless runtimes (e.g., Vercel), we eliminate the network boundary overhead between frontend and backend, enabling deeply integrated React Server Components (RSC) and Server Actions.
+Orteam v0.2 adalah **aplikasi statis** (Next.js static export) yang
+di-deploy ke Cloudflare Pages. Tidak ada server aplikasi yang berjalan.
 
-### Core Bounded Contexts
-1. **Identity & Tenant Boundary (Cloudflare Access):** Manages user lifecycles, JWT generation, and B2B Organization (Team) groupings.
-2. **Persistent State & Access Control (Supabase):** PostgreSQL database shielded by strictly evaluated Row Level Security (RLS) policies.
-3. **Ephemeral Sync Engine (Yjs + WebSockets):** Handles the sub-millisecond collaboration state for the Visual Workspace and Document editors.
-4. **Application Logic (Next.js):** Coordinates UI rendering, server-side data fetching, and external API integrations (Resend for emails).
+### Bounded context yang ada
+
+1. **Presentasi (Next.js App Router):** landing `/` + workspace
+   `/workspace`. Semua interaksi demo terjadi di klien.
+2. **State demo (localStorage):** `orteam-demo-v1`, bentuk baris =
+   `schema.sql`. Seed di `src/lib/demo-data.ts`.
+3. **Persistensi produksi (Supabase):** Postgres + RLS, skema di
+   `supabase/schema.sql`. Klien di `src/lib/supabase/` (tanpa Clerk).
+   Aktif hanya bila env diset; UI produksi belum diimplementasikan.
+
+### Bounded context yang DIRENCANAKAN (desain saja)
+
+- **Identity & tenant (Clerk):** JWT template `supabase`, webhook sync
+  `users`/`teams`. Desain lama menyebut "Cloudflare Access" di beberapa
+  dokumen — itu tidak konsisten dengan `schema.sql` (Clerk ID) dan
+  middleware lama (Clerk). Keputusan: **Clerk** adalah jalur auth yang
+  didokumentasikan; sebutan Cloudflare Access dihapus dari dokumen baru.
+- **Sync engine (Yjs + WebSockets):** whiteboard & docs real-time.
+- **Cache (Upstash Redis):** belum ada kebutuhan di mode demo/statis.
 
 ---
 
-## 2. API Design & Data Flow
+## 2. Alur data
 
-Instead of traditional REST APIs, Orteam heavily leverages **Next.js Server Actions** for mutations and **React Server Components (RSC)** for reads. This guarantees type safety from database schema to UI component without intermediate DTOs (Data Transfer Objects).
-
-### 2.1. Standard Mutation Flow (e.g., Creating a Task)
+### 2.1 Mutasi di mode demo (yang ada)
 
 ```text
-[Client UI] ──(1) Form Submit──► [Server Action: createTask()]
-                                         │
-                                         ├──► (2) Validate Auth JWT (Cloudflare Access)
-                                         ├──► (3) Parse schema (Zod)
-                                         │
-                                         ▼
-                                 [Supabase DB]
-                                 (Insert Row)
-                                         │
-                                         ▼
-[Client UI] ◄──(5) revalidatePath() ──(4) Return Success
+[Input kolom] ──(Enter)──► [addTask(status)] ──► [setState]
+                                                          │
+                                               [saveState()]
+                                                          ▼
+                                                 [localStorage]
 ```
-*Note: Due to `revalidatePath()`, the UI automatically refetches the updated task list without requiring client-side `useEffect` polling.*
 
-### 2.2. Webhook Ingestion (Auth Sync)
-To keep the Postgres database aware of user/team identities without querying Cloudflare Access on every request, we mirror the data via Webhooks.
-- Endpoint: `POST /api/webhooks/clerk`
-- Cryptographic Verification: Uses `svix` to verify the webhook payload signature.
-- Operations: Upserts into `users` or `teams` tables in Supabase upon `user.created` or `organization.created` events.
+Pindah kolom: `moveTask(id, ±1)` mengubah `status` (TODO ⇄ DOING ⇄ DONE)
+lalu menyimpan. Hapus: filter keluar dari array. Semua sinkron, tanpa
+request jaringan. Detail + bukti play-test: `docs/DEMO.md`.
 
----
-
-## 3. Real-Time Collaboration Engine (The Visual Core)
-
-The most complex subsystem in Orteam is the real-time syncing for the Whiteboard and Docs. We utilize **CRDTs (Conflict-free Replicated Data Types)** via `Yjs` to ensure that concurrent edits by multiple users merge flawlessly without central locking.
-
-### 3.1. Sync Architecture (Yjs + Supabase Realtime)
+### 2.2 Mutasi di mode produksi (desain, belum diimplementasikan)
 
 ```text
-+─────────────+       Awareness (Cursor Pos)      +──────────────+
-│  Client A   ├──────────────────────────────────>│   Supabase   │
-│ (React UI)  │                                   │   Realtime   │
-+──────┬──────+                                   │   (Channels) │
-       │                                          +──────┬───────+
-       │ Yjs Delta Updates                               │
-       ▼                                                 ▼
-+─────────────+                                   +──────────────+
-│ Yjs Local   │<────── Sync Broadcast ────────────┤  Client B    │
-│ CRDT Doc    │                                   │ (React UI)   │
-+──────┬──────+                                   +──────────────+
-       │
-       │ (Debounced Save every 5s)
-       ▼
-+─────────────+
-│ Upstash     │
-│ Redis Cache │
-+─────────────+
+[Client UI] ──(form)──► [Server Action / Route Handler]
+                              ├──► validasi JWT (Clerk)
+                              ├──► validasi skema (Zod)
+                              ▼
+                       [Supabase DB + RLS]
+                              │
+[Client UI] ◄── revalidate ───┘
 ```
 
-1. **Yjs Document:** The local state of the whiteboard is represented as a Yjs document.
-2. **Awareness Protocol:** Ephemeral data (like mouse cursor positions) is broadcasted via Supabase Realtime Presence. It is *not* saved to the database.
-3. **State Sync:** Changes to nodes/edges (deltas) are merged locally and broadcasted to other peers.
-4. **Persistence:** To avoid database write-locking, the final binary state of the Yjs document is saved to **Upstash Redis**, and periodically flushed to Supabase PostgreSQL (`whiteboard_sessions.data`).
+Tidak ada Server Action / Route Handler di build ini karena static
+export menolaknya. Desain ini dicatat agar implementasi fase 2 tidak
+mulai dari nol — bukan klaim bahwa ia sudah jalan.
+
+### 2.3 Webhook ingestion (desain)
+
+Endpoint yang direncanakan: `POST /api/webhooks/clerk`, verifikasi
+svix, upsert ke `users` / `teams` saat `user.created` /
+`organization.created`. Belum diimplementasikan.
 
 ---
 
-## 4. Authentication & Security Model
+## 3. Mesin kolaborasi real-time (RENCANA)
 
-### 4.1. The JWT Handoff (Cloudflare Access to Supabase)
-Since Cloudflare Access issues the authentication tokens but Supabase holds the data, we must inject the Cloudflare Access context into the Supabase client.
-
-1. **Middleware Intercept:** Next.js Middleware reads the Cloudflare Access session cookie.
-2. **Custom JWT Template:** Cloudflare Access generates a custom JWT containing the user's active `org_id` (Team ID).
-3. **Client Initialization:** The Supabase client is initialized using this custom JWT.
-```typescript
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: { headers: { Authorization: `Bearer ${clerkToken}` } }
-});
-```
-4. **PostgreSQL RLS:** The Supabase RLS policy reads the token to allow access:
-```sql
-CREATE POLICY "Isolate Team Data" ON tasks
-FOR ALL USING (
-  team_id = (auth.jwt() ->> 'org_id')
-);
-```
-*Result: True cryptographic multi-tenancy. A user mathematically cannot query tasks from a team they are not currently authenticated into.*
+Desain lama (dipertahankan sebagai rencana fase 3): CRDT via Yjs untuk
+whiteboard/docs, awareness (posisi kursor) via Supabase Realtime Presence
+(tidak disimpan), persistensi state biner Yjs ke Redis lalu flush berkala
+ke Postgres (`whiteboard_sessions.data` — tabel ini BELUM ada di
+`schema.sql`). Versi demo saat ini mengganti seluruh mesin ini dengan
+node draggable + localStorage — cukup untuk membuktikan UX canvas,
+bukan kolaborasi multipemain.
 
 ---
 
-## 5. Performance, Scalability & Monitoring
+## 4. Keputusan arsitektur (ADR singkat)
 
-### 5.1. Caching Strategy
-- **Static Assets & Marketing Pages:** Cached heavily at the CDN edge via Next.js default static generation.
-- **Route Handlers / API:** Edge caching with `stale-while-revalidate` where applicable.
-- **Rate Limiting:** Implemented in Next.js Middleware using Upstash Redis. (e.g., Max 10 API requests per 10 seconds per IP) to prevent DDoS on public invitation links.
+| # | Keputusan | Alasan | Status |
+|---|---|---|---|
+| 1 | Static export ke Pages | Demo tanpa server; deploy deterministik | ✅ |
+| 2 | Hapus middleware Clerk | Paket tak terinstal; build gagal | ✅ 18 Nov 2026 |
+| 3 | Klien Supabase tanpa Clerk | Lepas dependensi rusak; RLS tetap | ✅ |
+| 4 | Seed demo = bentuk schema.sql | Migrasi demo → produksi tanpa ubah bentuk | ✅ |
+| 5 | npm ganti pnpm | Satu paket, tanpa workspace | ✅ |
+| 6 | Next 16.4.6 | Advisory bersih (pola repo #23) | ✅ |
+| 7 | `scripts/serve.mjs` | Python http.server salah sajikan rute Next 16 | ✅ |
+| 8 | Clerk sebagai jalur auth | Konsisten dengan schema.sql (Clerk ID) | Diputuskan |
+| 9 | Yjs + Realtime fase 3 | Butuh desain matang; bukan MVP | Rencana |
+| 10 | Resend fase 4 | Email bukan inti workspace | Rencana |
 
-### 5.2. Error Observability (Sentry)
-Sentry is instrumented across all runtime layers:
-- **Client (Browser):** React Error Boundaries catch rendering crashes in the Canvas engine.
-- **Server (Node.js):** Tracks failures in Server Actions and database query timeouts.
-- **Edge:** Traces middleware exceptions and unauthorized access attempts.
+---
 
-### 5.3. Asset Storage
-User-uploaded assets (logos, PDF attachments in tasks) are uploaded directly from the Client to **Supabase Storage** (bypassing the Next.js server to reduce bandwidth bottlenecks) using pre-signed upload URLs.
+## 5. Struktur kode
+
+```
+src/app/                 / (landing) + /workspace (demo) + layout + globals
+src/components/ui/       button.tsx (shadcn/ui)
+src/lib/demo-data.ts     tipe + seed + load/save localStorage
+src/lib/supabase/        client.ts + server.ts (tanpa Clerk)
+src/lib/utils.ts         cn()
+supabase/schema.sql      users / teams / tasks + RLS
+scripts/                 advisory-sweep.py, serve.mjs
+docs/                    semua lapisan dokumentasi
+.agents/skills/          21 skill agen (1 dengan skrip Python + tes)
+```

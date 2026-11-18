@@ -9,7 +9,15 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Orteam | Collaboration OS",
-  description: "The smart workspace for your team.",
+  description:
+    "The smart workspace for your team — open-source kanban, visual canvas, and live roadmaps. Coba workspace demo tanpa daftar.",
+  metadataBase: new URL("https://orteam.pages.dev"),
+  openGraph: {
+    title: "Orteam | Collaboration OS",
+    description:
+      "The smart workspace for your team — open-source kanban, visual canvas, and live roadmaps.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
