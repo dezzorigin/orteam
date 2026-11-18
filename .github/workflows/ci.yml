@@ -145,6 +145,31 @@ jobs:
           [ "$code" = "404" ] || (echo "rute tak dikenal harus 404, dapat $code" && exit 1)
           echo "404: OK"
 
+  # TEMPORARY DIAGNOSTIC (hapus sebelum merge): advisory-sweep gagal 2x
+  # di CI dengan "GitHub API 401 Bad credentials" padahal token yang sama
+  # lolos di docsumm/my-dayz. Job ini menguji token terhadap endpoint
+  # yang sama + kontrol /user dan tanpa token.
+  token-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe GITHUB_TOKEN
+        run: |
+          echo "== /advisories dgn token (sama dgn sweep) =="
+          curl -s -o /tmp/adv.json -w 'advisories: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
+          head -c 300 /tmp/adv.json; echo
+          echo "== /user dgn token =="
+          curl -s -o /dev/null -w 'user: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/user"
+          echo "== /advisories tanpa token =="
+          curl -s -o /dev/null -w 'advisories-noauth: %{http_code}\n' \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/advisories?ecosystem=npm&per_page=1&affects=%40babel%2Fruntime"
+
   # Dokumen wajib ada + diagram SVG benar-benar SVG (bukan placeholder).
   docs:
     runs-on: ubuntu-latest
