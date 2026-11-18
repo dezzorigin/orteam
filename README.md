@@ -86,7 +86,8 @@ docs/               PRD, SDD, arsitektur, skema, keamanan, deploy, demo,
 Tidak ada secret yang ter-commit (dipindai 18 Nov 2026). `shadcn` (CLI)
 ada di `devDependencies`, bukan runtime. CI memakai
 `scripts/advisory-sweep.py` — hanya dependensi produksi yang diperiksa
-terhadap GitHub Advisory Database: **81 paket, 0 high/critical**.
+terhadap OSV (memirror GitHub Advisory Database, tanpa token):
+**81 paket, 0 high/critical**.
 Detail: [`docs/SECURITY.md`](./docs/SECURITY.md).
 
 ## Lisensi

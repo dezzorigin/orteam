@@ -22,7 +22,7 @@ dikerjakan di versi ini.
 - `.env.example` (template tanpa nilai rahasia).
 - CI (`.github/workflows/ci.yml`): build, typecheck, lint, python-tests,
   advisory-sweep, smoke, docs.
-- `scripts/advisory-sweep.py` (sweep produksi vs GitHub Advisory DB) dan
+- `scripts/advisory-sweep.py` (sweep produksi vs OSV, memirror GHSA) dan
   `scripts/serve.mjs` (server statis lokal meniru resolusi Cloudflare Pages).
 - Docs lengkap: `docs/README.md`, `ARCHITECTURE.md`, `SCHEMA.md`,
   `SECURITY.md`, `DEPLOYMENT.md`, `DEMO.md`, `DIAGRAMS.html` (HTML+SVG),

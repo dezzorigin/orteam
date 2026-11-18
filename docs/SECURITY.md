@@ -24,9 +24,15 @@
   mengimpor `shadcn`.
 - Gate keamanan di CI bukan `npm audit --omit=dev` (bug npm: tetap
   melaporkan advisory dev-only) melainkan `scripts/advisory-sweep.py`
-  yang memeriksa HANYA dependensi produksi terhadap GitHub Advisory
-  Database dan FAIL bila ada high/critical. Hasil 18 Nov 2026:
-  **81 paket produksi, 0 temuan high/critical**.
+  yang memeriksa HANYA dependensi produksi terhadap OSV (memirror
+  GitHub Advisory Database) dan FAIL bila ada high/critical. Hasil
+  18 Nov 2026: **81 paket produksi, 0 temuan high/critical**.
+
+  Catatan 18 Nov 2026: versi pertama sweep memakai API GitHub Advisory
+  Database dengan `GITHUB_TOKEN` dan gagal 5x di CI (`401 Bad
+  credentials`) sementara skrip yang sama lolos exit 0 di job probe run
+  yang sama — token per-job yang bermasalah, bukan skripnya. Karena itu
+  sumber data pindah ke OSV (tanpa auth, satu POST batch).
 - Next.js di-upgrade 16.3.0 → **16.4.6** (pola repo #23).
 
 ## RLS

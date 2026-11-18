@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sweep production dependencies against the GitHub Advisory Database.
+"""Sweep production dependencies against OSV (Open Source Vulnerabilities).
 
 Why this exists instead of `npm audit --omit=dev`:
 `npm audit --omit=dev` is documented to exclude dev dependencies, but in
@@ -8,77 +8,42 @@ packages (a known npm bug). That made the CI `audit` job fail
 deterministically on two dev-only HIGH findings (braces@3.0.3,
 picomatch@2.3.2) even though neither ships to users.
 
-This script queries the same data source Dependabot uses — the GitHub
-Advisory Database — and checks ONLY the packages that end up in the
-production tree (`dev: true` entries in package-lock.json are skipped).
-It FAILS (exit 1) when any production package is affected by a
-high/critical advisory. Withdrawn advisories are ignored.
+Why OSV instead of the GitHub Advisory Database API (history):
+the first version of this script queried
+`https://api.github.com/advisories` with the CI `GITHUB_TOKEN`. In the
+orteam CI it failed deterministically — 5x `401 Bad credentials` on the
+very first package, across 4 runs — while the SAME script, SAME token
+source, SAME run passed in a probe job (exit 0, "OK: no high/critical"),
+and curl/python probes with that token returned 200 for the identical
+endpoint. Diagnosis: some per-job `GITHUB_TOKEN`s are rejected by that
+endpoint (token lottery); the script, the token and the endpoint were
+each proven good in isolation. OSV (https://osv.dev) mirrors the GitHub
+Advisory Database (GHSA entries carry `database_specific.severity` from
+GitHub's own review), needs no auth, and answers all 81 packages in ONE
+batched POST (`/v1/querybatch`, max 1000 queries) — no token, no
+per-package requests, no rate-limit lottery.
+
+The script checks ONLY the packages that end up in the production tree
+(`dev: true` entries in package-lock.json are skipped). It FAILS (exit 1)
+when any production package is affected by a high/critical vulnerability.
+Withdrawn advisories are not returned by OSV queries for an affected
+version, and the query itself only returns vulns affecting the given
+version.
 
 Usage:
-    GITHUB_TOKEN=<token> python3 scripts/advisory-sweep.py
-The token is optional but recommended: unauthenticated GitHub API calls
-are rate-limited to 60/hour. In CI the built-in GITHUB_TOKEN is used.
-Exit code 0 = production tree clean, 1 = findings (or API error).
+    python3 scripts/advisory-sweep.py
+No token needed. Exit code 0 = production tree clean, 1 = findings,
+2 = API error.
 """
 
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.request
 
-SEVERITIES = ("high", "critical")
-API = "https://api.github.com/advisories?ecosystem=npm&per_page=100&affects="
-
-
-def norm(version):
-    """Normalize a version string into a comparable int list."""
-    version = re.split(r"[-+]", version, maxsplit=1)[0]
-    parts = [int(x) if x.isdigit() else 0 for x in version.split(".")]
-    return parts + [0] * (4 - len(parts))
-
-
-def cmpv(a, b):
-    pa, pb = norm(a), norm(b)
-    return (pa > pb) - (pa < pb)
-
-
-def in_range(ver, rng):
-    """True if ver matches a GitHub vulnerable_version_range.
-
-    Ranges are comma-separated AND conditions; segments are separated by
-    ';' or '||' (either means OR).
-    """
-    if not rng:
-        return False
-    for seg in re.split(r"[;|]+", rng):
-        seg = seg.strip()
-        if not seg:
-            continue
-        ok = True
-        for part in seg.split(","):
-            part = part.strip()
-            m = re.match(r"([<>=!]+)\s*([\d.]+)", part)
-            if not m:
-                continue
-            op, bound = m.groups()
-            c = cmpv(ver, bound)
-            if op == "<" and not c < 0:
-                ok = False
-            if op == "<=" and not c <= 0:
-                ok = False
-            if op == ">" and not c > 0:
-                ok = False
-            if op == ">=" and not c >= 0:
-                ok = False
-            if op == "=" and not c == 0:
-                ok = False
-            if op == "!=" and not c != 0:
-                ok = False
-        if ok:
-            return True
-    return False
+SEVERITIES = ("HIGH", "CRITICAL")
+OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 
 
 def pkg_name(key):
@@ -95,34 +60,10 @@ def pkg_name(key):
     return parts[0]
 
 
-def fetch_advisories(pkg, token):
-    """Return the advisory list for a package, following pagination."""
-    items = []
-    url = API + urllib.request.quote(pkg, safe="")
-    headers = {"Accept": "application/vnd.github+json"}
-    if token:
-        headers["Authorization"] = "Bearer " + token
-    while url:
-        req = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.build_opener().open(req, timeout=60) as r:
-                items.extend(json.loads(r.read() or b"[]"))
-                link = r.headers.get("Link", "")
-                m = re.search(r'<([^>]+)>;\s*rel="next"', link)
-                url = m.group(1) if m else None
-        except urllib.error.HTTPError as e:
-            body = e.read()[:500].decode("utf-8", "replace")
-            print(f"ERROR: GitHub API {e.code} for {pkg}: {body}", file=sys.stderr)
-            raise SystemExit(2)
-    return items
-
-
-def main():
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    lock_path = os.path.join(root, "package-lock.json")
+def load_prod_packages(lock_path):
+    """name -> sorted list of versions, production only."""
     with open(lock_path) as f:
         lock = json.load(f)
-
     prod = {}
     for key, info in lock.get("packages", {}).items():
         if not key or not info.get("version"):
@@ -130,31 +71,105 @@ def main():
         if info.get("dev"):
             continue
         prod.setdefault(pkg_name(key), set()).add(info["version"])
+    return {name: sorted(versions) for name, versions in sorted(prod.items())}
 
-    token = os.environ.get("GITHUB_TOKEN", "")
-    print(f"checking {len(prod)} production packages "
-          f"({sum(len(v) for v in prod.values())} name@version pairs)",
-          flush=True)
 
+def severity_of(vuln):
+    """HIGH/CRITICAL/MODERATE/LOW/None for one OSV vuln record.
+
+    GHSA-reviewed entries carry `database_specific.severity` (GitHub's own
+    rating). Otherwise try a numeric CVSS score in `severity[]`; CVSS
+    vector strings (e.g. "CVSS:3.1/...") are not parseable to a number
+    here and yield None (reported, not counted as a finding).
+    """
+    ds = vuln.get("database_specific") or {}
+    sev = (ds.get("severity") or "").upper()
+    if sev in ("CRITICAL", "HIGH", "MODERATE", "LOW"):
+        return sev
+    for entry in vuln.get("severity", []) or []:
+        try:
+            score = float(entry.get("score", ""))
+        except (TypeError, ValueError):
+            continue
+        if score >= 9.0:
+            return "CRITICAL"
+        if score >= 7.0:
+            return "HIGH"
+        if score >= 4.0:
+            return "MODERATE"
+        return "LOW"
+    return None
+
+
+def query_osv(queries):
+    """One batched POST; returns the decoded response dict."""
+    body = json.dumps({"queries": queries}).encode()
+    req = urllib.request.Request(
+        OSV_BATCH_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.build_opener().open(req, timeout=120) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        detail = e.read()[:500].decode("utf-8", "replace")
+        print(f"ERROR: OSV API {e.code}: {detail}", file=sys.stderr)
+        raise SystemExit(2)
+    except urllib.error.URLError as e:
+        print(f"ERROR: OSV API unreachable: {e}", file=sys.stderr)
+        raise SystemExit(2)
+
+
+def sweep(lock_path, query_fn=query_osv):
+    """Return (findings, unknown) for the lockfile at lock_path."""
+    prod = load_prod_packages(lock_path)
+    pairs = [(name, ver) for name, vers in prod.items() for ver in vers]
+    print(
+        f"checking {len(prod)} production packages "
+        f"({len(pairs)} name@version pairs)",
+        flush=True,
+    )
+    queries = [
+        {"package": {"name": name, "ecosystem": "npm"}, "version": ver}
+        for name, ver in pairs
+    ]
+    resp = query_fn(queries)
+    results = resp.get("results", [])
     findings = []
-    for pkg in sorted(prod):
-        for ver in sorted(prod[pkg]):
-            for adv in fetch_advisories(pkg, token):
-                if adv.get("state") == "withdrawn":
-                    continue
-                if adv.get("severity") not in SEVERITIES:
-                    continue
-                for vuln in adv.get("vulnerabilities", []):
-                    if in_range(ver, vuln.get("vulnerable_version_range", "")):
-                        findings.append(
-                            f"{pkg}@{ver}: {adv.get('ghsa_id')} "
-                            f"{adv.get('severity')} {adv.get('cve_id') or ''} "
-                            f"range={vuln.get('vulnerable_version_range')}"
-                        )
+    unknown = []
+    seen = set()
+    for (name, ver), res in zip(pairs, results):
+        for vuln in res.get("vulns", []) or []:
+            sev = severity_of(vuln)
+            vid = vuln.get("id", "?")
+            aliases = ",".join(vuln.get("aliases", []) or [])
+            key = (name, ver, vid)
+            if key in seen:
+                continue
+            seen.add(key)
+            if sev in SEVERITIES:
+                findings.append(f"{name}@{ver}: {vid} {sev} {aliases}")
+            elif sev is None:
+                unknown.append(f"{name}@{ver}: {vid} (severity unknown)")
+    return findings, unknown
+
+
+def main():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    lock_path = os.path.join(root, "package-lock.json")
+    findings, unknown = sweep(lock_path)
+
+    for line in unknown:
+        print("  note: " + line, flush=True)
 
     if findings:
-        print(f"FAIL: {len(findings)} HIGH/CRITICAL finding(s) in "
-              "production dependencies:", flush=True)
+        print(
+            f"FAIL: {len(findings)} HIGH/CRITICAL finding(s) in "
+            "production dependencies:",
+            flush=True,
+        )
         for line in findings:
             print("  " + line, flush=True)
         return 1

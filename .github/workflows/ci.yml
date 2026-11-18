@@ -66,9 +66,16 @@ jobs:
   # `npm audit --omit=dev` tetap melaporkan advisory yang hanya reachable
   # lewat dev deps (bug npm yang diketahui), sehingga job audit lama gagal
   # deterministik pada temuan HIGH dev-only padahal pohon produksi bersih.
-  # Sweep ini memakai sumber data yang sama (GitHub Advisory Database,
-  # dipakai Dependabot) tapi hanya memeriksa dependensi produksi, dan
-  # tetap FAIL kalau ada temuan high/critical di prod.
+  # Sweep ini memeriksa HANYA dependensi produksi dan tetap FAIL kalau ada
+  # temuan high/critical di prod.
+  #
+  # DATA SOURCE: OSV (https://osv.dev), bukan lagi API GitHub Advisory
+  # Database. Alasan (18 Nov 2026, diselidiki 5 kegagalan CI): versi
+  # pertama skrip ini memakai GITHUB_TOKEN ke api.github.com/advisories
+  # dan gagal 5x dgn 401 Bad credentials — padahal skrip, token, dan
+  # endpoint masing-masing terbukti baik (skrip yang sama lolos exit 0 di
+  # job probe run yang sama). OSV memirror GHSA, tanpa auth, dan menjawab
+  # 81 paket dalam SATU POST batch — tanpa lotre token.
   #
   # CATATAN KLASIFIKASI (pelajaran repo #22): `shadcn` (CLI) HARUS tetap
   # di devDependencies — ia pernah duduk di dependencies dan menyeret
@@ -76,8 +83,8 @@ jobs:
   # klasifikasi produksi, 57 temuan HIGH/CRITICAL di CI run pertama.
   # Di repo ini klasifikasi sudah diperbaiki; yang dicek sweep adalah
   # Next.js 16.4.6 (upgrade dari 16.3.0, pola repo #23) + React 19 +
-  # Supabase-js + pendukung UI. Hasil lokal 18 Nov 2026: 81 paket
-  # produksi, 0 temuan high/critical.
+  # Supabase-js + pendukung UI. Hasil lokal 18 Nov 2026 (API GitHub):
+  # 81 paket produksi, 0 temuan high/critical.
   advisory-sweep:
     runs-on: ubuntu-latest
     steps:
@@ -144,21 +151,6 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8335/tidak-ada)
           [ "$code" = "404" ] || (echo "rute tak dikenal harus 404, dapat $code" && exit 1)
           echo "404: OK"
-
-  # TEMPORARY DIAGNOSTIC v3: jalankan SKRIP ASLI di job probe (token sama
-  # yang di inline-python semua 200). Kalau skrip tetap 401 di sini,
-  # penyebabnya ada di dalam skrip; kalau lolos, token job sweep-lah
-  # yang bermasalah (token per-job, lotre).
-  token-probe:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Probe script asli
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 scripts/advisory-sweep.py; echo "script exit: $?"
 
   # Dokumen wajib ada + diagram SVG benar-benar SVG (bukan placeholder).
   docs:
