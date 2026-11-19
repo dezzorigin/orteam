@@ -16,7 +16,23 @@ export const metadata: Metadata = {
     title: "Orteam | Collaboration OS",
     description:
       "The smart workspace for your team — open-source kanban, visual canvas, and live roadmaps.",
+    url: "https://orteam.pages.dev",
     type: "website",
+    images: [
+      {
+        url: "https://orteam.pages.dev/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Orteam — the smart workspace for your team",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Orteam | Collaboration OS",
+    description:
+      "The smart workspace for your team — open-source kanban, visual canvas, and live roadmaps.",
+    images: ["https://orteam.pages.dev/og-image.png"],
   },
 };
 
